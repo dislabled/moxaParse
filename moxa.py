@@ -11,8 +11,9 @@
 
 import requests
 import subprocess
+from requests_html import HTMLSession
 
-ethernet_card = "enp3s0f3u1u1u1"
+ethernet_card = "enp0s31f6"
 laptop_def_ip = "192.168.127.200"
 laptop_new_ip = "172.16.172.200"
 pre_ip = "192.168.127.253"
@@ -56,7 +57,8 @@ def ipsettings():
         exit("Kunne ikke skifte ip")
 
 def alarmsettings():
-    alarm_url = "http://" + pre_ip + "/relay_alarm_setting_show.asp"
+    alarm_url = "http://" + pre_ip + "/home.asp"
+    alarm_url = "http://" + pre_ip + "/relay_alarm_setting.asp"
     #alarm_url = "http://" + pre_ip + "/goform/AlarmEventType"
     alarm_payload = {
             'port1_link_select': '1',
@@ -85,13 +87,21 @@ def alarmsettings():
             'di2offon_select': '',
             'ringrelay_select': '0',
             } 
-    data ={'port1_link_select': ''}
+    # data ={'port1_link_select': ''}
     # alarm_post = requests.post(alarm_url, data=alarm_payload, cookies=cookies)
-    alarm_get = requests.get(alarm_url, data=data, cookies=cookies)
-    print(alarm_get)
-    print(data)
+    # alarm_get = requests.get(alarm_url, data=data, cookies=cookies)
+    # print(alarm_get)
+    # print(data)
     # if alarm_post.status_code != 200:
     #     exit("kunne ikke endre på alarm")
+    session = HTMLSession()
+    r = session.get(alarm_url, cookies=cookies)
+    print(r.url)
+    r.html.render(reload=False)  # this call executes the js in the page
+    print(r.html.text)
+    print("-" * 80)
+    print(r.html.search('relay1_enable'))
+    # print(r.html.find('port1_link_select').text)
 
 def firmware_update():
     files = {'binary': (firmware_file, open(firmware_file,'rb'))}
@@ -115,11 +125,33 @@ def change_ip(ip):
     else:
         print("Har allerede IP: ", current_ip)
 
+def login_session():
+    url = "http://" + pre_ip + "/auth/accountpassword.asp"
+    try:
+        session = HTMLSession()
+        payload = {'account': 'admin', 'password': 'test', 'Loginin.x': '43', 'Loginin.y': '18'}
+        r = session.post(url, data=payload)
+        # r = session.get(url)
+        r.html.render(reload=False)
+        print(r.html.url)
+        print("-" * 80)
+        print(r.cookies)
+        # account = login.html.search('Account')
+        # print("-" * 80)
+        # print(account)
+        # login = session.post(url, data=payload)
+        # print(login.cookies)
+        # print(login.url)
+        # response = session.get(url, cookies=cookies)
+        # response.html.render()
+        # print(response)
+         
+    except requests.exceptions.RequestException as e:
+        print(e)
 
 
 if __name__ == "__main__":
 
-    #change_ip(laptop_def_ip)
     while True:
         print()
         print("1. Sette IP addresse på laptop (192.168.127.200)")
@@ -144,6 +176,8 @@ if __name__ == "__main__":
             alarmsettings()
         elif choice == '7':
             pass
+        elif choice == '8':
+            login_session()
             #alarmsettings()
         else:
             break

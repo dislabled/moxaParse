@@ -35,6 +35,14 @@ def switch_mode_to_cli(ip):
     tn.write(b'Y\n')                            # Enter yes to switch to CLI
                                                 # connection closes automaticly
 
+def switch_mode_to_menu(ip):
+    tn = telnetlib.Telnet(ip)
+    tn.write(b'login mode menu')
+
+def switch_set_location(ip, location):
+    tn = telnetlib.Telnet(ip)
+    tn.write(b'configure')
+
 def login(ip):
     tn = telnetlib.Telnet(ip)
     tn.read_until(b'login as:')
@@ -46,7 +54,7 @@ def login(ip):
     tn.interact()
 
 def start_tftp_server():
-    server = tftpy.TftpServer('.')
+    server = tftpy.TftpServer('')
     server.listen('0.0.0.0', 6969)
 
 if __name__ == "__main__":

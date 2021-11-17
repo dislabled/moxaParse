@@ -2,20 +2,17 @@
 # coding=utf-8
 
 import telnetlib
+from multiprocessing import Process
 from time import sleep
 import tftpy
 
 
 user = 'admin'
-password = 'test'
+password = ''
 switch_pre_ip = "192.168.127.253"
 laptop_pre_ip ='192.168.127.200'
 sleep_time = 0.5
 fw_file = 'EDS408A_V3.8.rom'
-
-
-
-
 
 
 def switch_mode_to_cli(ip):
@@ -23,6 +20,7 @@ def switch_mode_to_cli(ip):
     print('Entering Ansi terminal...')
     sleep(sleep_time)
     tn.write(b'\r')                             # Press enter to use ansi terminal
+    # tn.interact()
     print('Writing Account name: {}'.format(user))
     sleep(sleep_time)
     tn.write(user.encode('utf-8') + b'\n')      # Enter username
@@ -44,55 +42,43 @@ def switch_mode_to_menu(ip):
     tn = telnetlib.Telnet(ip)
     tn.write(b'login mode menu')
 
-def switch_set_location(ip, location):
-    tn = telnetlib.Telnet(ip)
-    tn.write(b'configure')
-
 def login(ip):
-    hostname = input('Hostname: ')
     tn = telnetlib.Telnet(ip)
-    tn.read_until(b'login as:')
-    print('Writing Account name: {}'.format(user))
+    print(tn.read_until(b'login as:').decode('ascii'))
+    # print('Writing Account name: {}'.format(user))
     tn.write(user.encode('ascii') + b'\n')      # Enter username
-    tn.read_until(b'password:')
-    print('Writing Password: {}'.format(password))
+    print(tn.read_until(b'password:').decode('ascii'))
+    # print('Writing Password: {}'.format(password))
     tn.write(password.encode('ascii') + b'\n')  # Enter password
-    # sleep(sleep_time)
-    # tn.write(b'\n')
-    tn.read_until(b'#')
-    tn.write(b'configure\n')
-    tn.write(b'hostname ' + hostname.encode('ascii') + b'\n')
-
-def start_tftp_server():
+    tn.write('\n'.encode('ascii'))
+    tn.read_until(b'EDS-408A-MM-SC#')
     server = tftpy.TftpServer('')
-    server.listen('192.168.127.200', 6969)
-
-def switch_update_FW(ip):
-    tn = telnetlib.Telnet(ip)
-    tn.write(b'copy tftp device-firmware\n')
-    tn.read_all()
-    tn.write(laptop_pre_ip.encode('utf-8') + b'\n')
-    tn.read_all()
-    tn.write(fw_file.encode('utf-8') + b'\n')
-
+    p = Process(target=server.listen, args=(laptop_pre_ip,69))
+    # ----------------------------------------------------------------------------- logged in
+    while True:
+        print('1. Update Firmware')
+        print('2. Download Config')
+        print('3. Upload Config')
+        choice = input('What do you want to do: ')
+        if choice == '':
+            break
+        if int(choice) == 1:
+            p.start()
+            tn.write(b'copy tftp device-firmware\n')
+            tn.write(laptop_pre_ip.encode('utf-8') + b'\n')
+            tn.write(fw_file.encode('utf-8') + b'\n')
+            print(tn.read_until(b'Download OK !!!').decode('ascii'))
+            print('Switch is rebooting.')
+            p.terminate()
+            break
+        if int(choice) == 2:
+            p.start()
+            tn.write(b'copy running-config tftp ')
+            tn.write(b'tftp://' + laptop_pre_ip.encode('ascii') + b'/cli.ini\n')
+            print(tn.read_until(b'Upload Ok !!!').decode('ascii'))
+            p.terminate()
+        if int(choice) == 3:
+            pass
 
 if __name__ == "__main__":
-    # tn = telnetlib.Telnet(switch_pre_ip)
-    # tn.interact()
-    # start_tftp_server()
     login(switch_pre_ip)
-    # switch_set_location(switch_pre_ip, 'LOLTEST')
-    # tn.read_until()
-    # switch_mode_to_cli(switch_pre_ip)
-
-# print(tn.read_all().decode('utf-8'))
-# tn.read_until(b"account: ")
-# tn.write(user.encode('ascii') + b"\n")
-# if password:
-#     tn.read_until(b"Password: ")
-#     tn.write(password.encode('ascii') + b"\n")
-# 
-# tn.write(b"ls\n")
-# tn.write(b"exit\n")
-# 
-# print(tn.read_all().decode('ascii'))

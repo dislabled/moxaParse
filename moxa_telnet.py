@@ -58,9 +58,10 @@ def login(ip):
         while True:
             print('-' * 25)
             print('1. Update Firmware')
-            print('2. Download Config')
-            print('3. Upload Config')
-            print('4. Set login mode to menu')
+            print('2. Download Running Config')
+            print('3. Download Startip Config')
+            print('4. Upload Config')
+            print('5. Set login mode to menu')
             print('-' * 25)
             choice = input('What do you want to do: ')
             if choice == '':
@@ -77,12 +78,19 @@ def login(ip):
             if int(choice) == 2:
                 p.start()
                 tn.write(b'copy running-config tftp ')
-                tn.write(b'tftp://' + laptop_pre_ip.encode('ascii') + b'/cli.ini\n')
+                tn.write(b'tftp://' + laptop_pre_ip.encode('ascii') + b'/running.ini\n')
                 print(tn.read_until(b'Upload Ok !!!').decode('ascii'))
                 p.terminate()
             if int(choice) == 3:
-                pass
+                p.start()
+                tn.write(b'copy startup-config tftp\n')
+                tn.write(laptop_pre_ip.encode('ascii') + b'\n')
+                tn.write(b'sys.ini\n')
+                print(tn.read_until(b'Upload Ok !!!').decode('ascii'))
+                p.terminate()
             if int(choice) == 4:
+                pass
+            if int(choice) == 5:
                 tn.write(b'login mode menu\n')
                 break
 

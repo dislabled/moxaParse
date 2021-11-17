@@ -3,15 +3,20 @@
 
 import telnetlib
 from time import sleep
-import os
 import tftpy
 
 
 user = 'admin'
 password = 'test'
 switch_pre_ip = "192.168.127.253"
+laptop_pre_ip ='192.168.127.200'
 sleep_time = 0.5
-fw_file = "EDS408A_V3.8.rom"
+fw_file = 'EDS408A_V3.8.rom'
+
+
+
+
+
 
 def switch_mode_to_cli(ip):
     tn = telnetlib.Telnet(ip)
@@ -44,22 +49,39 @@ def switch_set_location(ip, location):
     tn.write(b'configure')
 
 def login(ip):
+    hostname = input('Hostname: ')
     tn = telnetlib.Telnet(ip)
     tn.read_until(b'login as:')
     print('Writing Account name: {}'.format(user))
-    tn.write(user.encode('utf-8') + b'\n')      # Enter username
+    tn.write(user.encode('ascii') + b'\n')      # Enter username
     tn.read_until(b'password:')
     print('Writing Password: {}'.format(password))
-    tn.write(password.encode('utf-8') + b'\n')  # Enter password
-    tn.interact()
+    tn.write(password.encode('ascii') + b'\n')  # Enter password
+    # sleep(sleep_time)
+    # tn.write(b'\n')
+    tn.read_until(b'#')
+    tn.write(b'configure\n')
+    tn.write(b'hostname ' + hostname.encode('ascii') + b'\n')
 
 def start_tftp_server():
     server = tftpy.TftpServer('')
-    server.listen('0.0.0.0', 6969)
+    server.listen('192.168.127.200', 6969)
+
+def switch_update_FW(ip):
+    tn = telnetlib.Telnet(ip)
+    tn.write(b'copy tftp device-firmware\n')
+    tn.read_all()
+    tn.write(laptop_pre_ip.encode('utf-8') + b'\n')
+    tn.read_all()
+    tn.write(fw_file.encode('utf-8') + b'\n')
+
 
 if __name__ == "__main__":
-    start_tftp_server()
-    # login(switch_pre_ip)
+    # tn = telnetlib.Telnet(switch_pre_ip)
+    # tn.interact()
+    # start_tftp_server()
+    login(switch_pre_ip)
+    # switch_set_location(switch_pre_ip, 'LOLTEST')
     # tn.read_until()
     # switch_mode_to_cli(switch_pre_ip)
 

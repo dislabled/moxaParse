@@ -1,19 +1,43 @@
 #!/usr/bin/env python3
 # coding=utf-8
 
-import telnetlib
-from multiprocessing import Process
-from time import sleep
 import tftpy
+import telnetlib
+import subprocess
+from time import sleep
+from multiprocessing import Process
 
 
 user = 'admin'
 password = ''
-switch_pre_ip = "192.168.127.253"
-laptop_pre_ip ='192.168.127.200'
 sleep_time = 0.5
 fw_file = 'EDS408A_V3.8.rom'
+ethernet_card = "enp0s31f6"
+switch_pre_ip = "192.168.127.253"
+laptop_pre_ip ='192.168.127.200'
 
+def change_ip(ip):
+    get_ip = subprocess.run(["ip addr show " + ethernet_card], shell=True, capture_output=True, encoding='ascii')
+    slicepos = get_ip.stdout.find('inet ')
+    current_ip = ''.join(get_ip.stdout[slicepos+5:slicepos+20])
+    if ip != current_ip:
+        set_ip = subprocess.run(["sudo ip addr add local " + ip + "/24 broadcast " + ip[:-3] + "255 dev " + ethernet_card], shell=True)
+        if set_ip.returncode == 0:
+            print("IP addresse: {}".format(ip))
+        else:
+            print("Kunne ikke sette ip")
+            exit(-1)
+    else:
+        print("Har allerede IP: ", current_ip)
+
+"""
+
+terminal length 0
+show relay warning
+
+
+
+"""
 
 def login(ip):
     tn = telnetlib.Telnet(ip)
@@ -53,7 +77,6 @@ def login(ip):
         tn.write('\n'.encode('ascii'))
         tn.read_until(b'EDS-408A-MM-SC#')
         server = tftpy.TftpServer('')
-        p = Process(target=server.listen, args=(laptop_pre_ip,69))
         # ----------------------------------------------------------------------------- logged in
         while True:
             print('-' * 25)
@@ -67,27 +90,36 @@ def login(ip):
             if choice == '':
                 break
             if int(choice) == 1:
+                p = Process(target=server.listen, args=(laptop_pre_ip,69))
                 p.start()
                 tn.write(b'copy tftp device-firmware\n')
                 tn.write(laptop_pre_ip.encode('utf-8') + b'\n')
                 tn.write(fw_file.encode('utf-8') + b'\n')
-                print(tn.read_until(b'Download OK !!!').decode('ascii'))
+                print(tn.read_until(b'Download OK !!!', 5.0).decode('ascii'))
                 print('Switch is rebooting.')
                 p.terminate()
+                p.join()
+                p.close()
                 break
             if int(choice) == 2:
+                p = Process(target=server.listen, args=(laptop_pre_ip,69))
                 p.start()
                 tn.write(b'copy running-config tftp ')
                 tn.write(b'tftp://' + laptop_pre_ip.encode('ascii') + b'/running.ini\n')
-                print(tn.read_until(b'Upload Ok !!!').decode('ascii'))
+                print(tn.read_until(b'Upload Ok !!!', 5.0).decode('ascii'))
                 p.terminate()
+                p.join()
+                p.close()
             if int(choice) == 3:
+                p = Process(target=server.listen, args=(laptop_pre_ip,69))
                 p.start()
                 tn.write(b'copy startup-config tftp\n')
                 tn.write(laptop_pre_ip.encode('ascii') + b'\n')
                 tn.write(b'sys.ini\n')
-                print(tn.read_until(b'Upload Ok !!!').decode('ascii'))
+                print(tn.read_until(b'Upload Ok !!!', 5.0).decode('ascii'))
                 p.terminate()
+                p.join()
+                p.close()
             if int(choice) == 4:
                 pass
             if int(choice) == 5:
@@ -95,4 +127,14 @@ def login(ip):
                 break
 
 if __name__ == "__main__":
-    login(switch_pre_ip)
+    while True:
+        print('1. Telnet options')
+        print('2. Change laptop ip')
+        choice = input('>_  ')
+        if str(choice) == '':
+            break
+        if int(choice) == 1:
+            login(switch_pre_ip)
+            break
+        if int(choice) == 2:
+            change_ip(laptop_pre_ip)

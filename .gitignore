@@ -1,1 +1,4 @@
+__pycache__/
 *.ini
+test.py
+test.txt

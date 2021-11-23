@@ -16,6 +16,15 @@ ethernet_card = "enp0s31f6"
 switch_pre_ip = "192.168.127.253"
 laptop_pre_ip ='192.168.127.200'
 
+"""
+1. oppdatere navn
+2. sjekke porter / evt stille porter
+4. oppdatere firmware
+3. skifte ip addresse
+
+
+"""
+
 def get_ip():
     get_ip = subprocess.run(["ip addr show " + ethernet_card], shell=True, capture_output=True, encoding='ascii')
     slicepos = get_ip.stdout.find('inet ')
@@ -79,10 +88,28 @@ def login(ip):
         sysinfo = tn.read_until(b'EDS-408A-MM-SC#').decode('ascii')
         tn.write(b'show version\n')
         version = tn.read_until(b'EDS-408A-MM-SC#').decode('ascii')
+        tn.write(b'show interfaces ethernet\n')
+        ifaceinfo = re.findall("(?<=(?:1/.{3}))\\w+", tn.read_until(b'EDS-408A-MM-SC#').decode('ascii'))
+        tn.write(b'show relay-warning config\n')
+        relayinfo = re.findall("(?<=(?:1/.).{10})\\w+", tn.read_until(b'EDS-408A-MM-SC#').decode('ascii'))
         sysinfo_list = re.findall('(?<=: ).*', sysinfo)
         version_list = re.findall('(?<=: ).*', version)
         print('Hostname: ' + sysinfo_list[0])
         print('FW Version: ' + version_list[1])
+        counter1 = 1
+        portliste = []
+        for port in relayinfo:
+            if port == 'Off':
+                portliste.append(counter1)
+            counter1 += 1
+        print('porter med alarm: {}'.format(portliste))
+        ifaceliste = []
+        counter2 = 1
+        for port in ifaceinfo:
+            if port == 'Up':
+                ifaceliste.append(counter2)
+            counter2 += 1
+        print('porter i bruk: {}'.format(ifaceliste))
         # -----
         server = tftpy.TftpServer('')
         # ----------------------------------------------------------------------------- logged in
@@ -137,14 +164,27 @@ def login(ip):
                 tn.write(b'login mode menu\n')
                 break
             if int(choice) == 6:
-                tn.write(b'terminal length 0\n')
-                tn.read_until(b'EDS-408A-MM-SC#')
-                tn.write(b'show relay-warning config\n')
-                relay_text = tn.read_until(b'EDS-408A-MM-SC#')
-                print(relay_text.decode('ascii'))
+                iface = input('configure which port: ')
+                tn.write(b'configure\n')
+                tn.read_until(b'EDS-408A-MM-SC(config)#')
+                tn.write(b'interface ethernet 1/'+ iface.encode('ascii') + b'\n')
+                tn.read_until(b'EDS-408A-MM-SC(config-if)#')
+                config_if = input('activate(0) or deactivate(1)?: ')
+                if config_if == '0':
+                    tn.write(b'relay-warning event link-off\n')
+                    tn.read_until(b'EDS-408A-MM-SC(config-if)#')
+                    tn.write(b'exit\n')
+                    tn.read_until(b'EDS-408A-MM-SC(config)#')
+                    tn.write(b'exit\n')
+                    tn.read_until(b'EDS-408A-MM-SC#')
+                else:
+                    tn.write(b'no relay-warning event link\n')
+                    tn.read_until(b'EDS-408A-MM-SC(config-if)#')
+                    tn.write(b'exit\n')
+                    tn.read_until(b'EDS-408A-MM-SC(config)#')
+                    tn.write(b'exit\n')
+                    tn.read_until(b'EDS-408A-MM-SC#')
             if int(choice) == 7:
-                tn.write(b'terminal length 0\n')
-                tn.read_until(b'EDS-408A-MM-SC#')
                 tn.write(b'configure\n')
                 tn.read_until(b'EDS-408A-MM-SC(config)#')
                 tn.write(b'interface mgmt\n')
@@ -155,8 +195,6 @@ def login(ip):
                 relay_text = tn.read_until(b'EDS-408A-MM-SC#')
                 # print(relay_text)
             if int(choice) == 8:
-                tn.write(b'terminal length 0\n')
-                tn.read_until(b'EDS-408A-MM-SC#')
                 tn.write(b'configure\n')
                 relay_text = tn.read_until(b'EDS-408A-MM-SC(config)#')
                 hostname = input('Switch Name: ')
@@ -168,6 +206,8 @@ def login(ip):
 
 if __name__ == "__main__":
     while True:
+        hostname = input('Hostname: ')
+        switch_new_ip = input('Last 3 digits of switch ip: ')
         current_ip = get_ip()
         if current_ip == laptop_pre_ip:
             login(switch_pre_ip)

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # coding=utf-8
 
+import re
 import tftpy
 import telnetlib
 import subprocess
-from time import sleep, time
+from time import sleep
 from multiprocessing import Process
-
 
 user = 'admin'
 password = ''
@@ -79,8 +79,10 @@ def login(ip):
         sysinfo = tn.read_until(b'EDS-408A-MM-SC#').decode('ascii')
         tn.write(b'show version\n')
         version = tn.read_until(b'EDS-408A-MM-SC#').decode('ascii')
-        print(sysinfo)
-        print(version)
+        sysinfo_list = re.findall('(?<=: ).*', sysinfo)
+        version_list = re.findall('(?<=: ).*', version)
+        print('Hostname: ' + sysinfo_list[0])
+        print('FW Version: ' + version_list[1])
         # -----
         server = tftpy.TftpServer('')
         # ----------------------------------------------------------------------------- logged in
@@ -92,6 +94,7 @@ def login(ip):
             print('4. Upload Config')
             print('5. Set login mode to menu')
             print('6. Show relay-warnings')
+            print('7. Change switch IP address')
             print('8. Change Name of switch')
             print('-' * 25)
             choice = input('What do you want to do: ')

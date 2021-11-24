@@ -1,4 +1,5 @@
 __pycache__/
+*.rom
 *.ini
 test.py
 test.txt

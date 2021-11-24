@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 # coding=utf-8
 
+"""
+TODO:
+    * class to keep connection
+    * keep connection alive: 2min timeout
+    * automate everything
+"""
 import re
 import tftpy
 import telnetlib

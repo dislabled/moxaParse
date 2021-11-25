@@ -28,6 +28,7 @@ fw_file = ['EDS408A_V3.8.rom', 3.8]
 ethernet_card = "enp0s31f6"
 switch_pre_ip = "192.168.127.253"
 client_default_ip ='192.168.127.200'
+client_moxa_ip = '172.168.16.200'
 
 
 def get_ip():
@@ -39,11 +40,12 @@ def get_ip():
     current_ip = ''.join(get_ip.stdout[slicepos+5:slicepos+20])
     return current_ip
 
-def change_ip(ip):
+def change_ip(ip, ip2):
     """
     change ip address of client to (ip)
     """
     # remove from last dot, not last 3 spaces in case of ip address under 100:
+    set_ip = subprocess.run(["sudo ip addr add local " + ip2 + "/24 broadcast " + ip[:-3] + "255 dev " + ethernet_card], shell=True)
     set_ip = subprocess.run(["sudo ip addr add local " + ip + "/24 broadcast " + ip[:-3] + "255 dev " + ethernet_card], shell=True)
     if set_ip.returncode == 0:
         print("IP address set to: {}".format(ip))
@@ -176,14 +178,14 @@ class Connection:
         self.p.join()
         self.p.close()
 
-    def get_startup_conf(self):
+    def get_startup_conf(self, filename):
         """
         start tftp server async and instruct switch to upload the startup configuration
         """
         self.p.start()
         self.tn.write(b'copy startup-config tftp\n')
         self.tn.write(client_default_ip.encode('ascii') + b'\n')
-        self.tn.write(b'sys.ini\n')
+        self.tn.write(filename.encode('ascii') + b'_sys.ini\n')
         print(self.tn.read_until(b'Upload Ok !!!', 5.0).decode('ascii'))
         self.p.terminate()
         self.p.join()
@@ -239,29 +241,34 @@ class Connection:
         self.tn.read_until(b'EDS-408A-MM-SC#')
 
     def conf_ip(self, ip):
-                """
-                Changes the ip-address of the switch to (ip)
-                """
-                self.tn.write(b'configure\n')
-                self.tn.read_until(b'EDS-408A-MM-SC(config)#')
-                self.tn.write(b'interface mgmt\n')
-                self.tn.read_until(b'EDS-408A-MM-SC(config-vlan)#')
-                self.tn.write(b'ip address static 192.168.127.' +
-                        ip.encode('ascii') + b' 255.255.255.0\n')
-                self.tn.write(b'exit\n')
-                self.tn.read_until(b'EDS-408A-MM-SC#')
+        """
+        Changes the ip-address of the switch to (ip)
+        """
+        self.tn.write(b'configure\n')
+        self.tn.read_until(b'EDS-408A-MM-SC(config)#')
+        self.tn.write(b'interface mgmt\n')
+        self.tn.read_until(b'EDS-408A-MM-SC(config-vlan)#')
+        self.tn.write(b'ip address static 172.168.16.' +
+                ip.encode('ascii') + b' 255.255.255.0\n')
+        self.tn.write(b'exit\n')
+        self.tn.read_until(b'EDS-408A-MM-SC#')
 
     def conf_hostname(self, hostname):
-                """
-                Changes the hostname of the switch to (hostname)
-                """
-                self.tn.write(b'configure\n')
-                self.tn.read_until(b'EDS-408A-MM-SC(config)#')
-                self.tn.write(b'hostname ' + hostname.encode('ascii') + b'\n')
-                self.tn.read_until(b'EDS-408A-MM-SC(config)#')
-                self.tn.write(b'exit\n')
-                self.tn.read_until(b'EDS-408A-MM-SC#')
+        """
+        Changes the hostname of the switch to (hostname)
+        """
+        self.tn.write(b'configure\n')
+        self.tn.read_until(b'EDS-408A-MM-SC(config)#')
+        self.tn.write(b'hostname ' + hostname.encode('ascii') + b'\n')
+        self.tn.read_until(b'EDS-408A-MM-SC(config)#')
+        self.tn.write(b'exit\n')
+        self.tn.read_until(b'EDS-408A-MM-SC#')
 
+    def save(self):
+        self.tn.write(b'save\n')
+        status = self.tn.expect([br'Success', br'Fail'], 5)
+        self.tn.read_until(b'EDS-408A-MM-SC#')
+        return status
 
 if __name__ == "__main__":
     while True:
@@ -270,7 +277,7 @@ if __name__ == "__main__":
         if current_ip != client_default_ip:
             ipchange = input('Default IP doesnt match, change? (y/n)')
             if ipchange.lower() == 'y':
-                change_ip(client_default_ip) 
+                change_ip(client_default_ip, client_moxa_ip) 
         # -----------[ switch ]---------------
         hostname = input('Enter hostname for the switch: ')
         clientport = input('Which port is the client attached to: ')
@@ -286,18 +293,30 @@ if __name__ == "__main__":
             break
         elif login_mode[0] == 1:
             moxa_switch.cli_login()
+            print('Changing Hostname: {}'.format(hostname))
             moxa_switch.conf_hostname(hostname)
+            print('Checking and setting port alarms...')
             moxa_switch.conf_iface(make_alarmdict(moxa_switch.get_ifaces(), moxa_switch.get_portconfig(), clientport))
+            print('Checking for firmware updates...')
             if float(moxa_switch.get_version()[1][1:]) < fw_file[1]:
-                # moxa_switch.push_firmware()
+                moxa_switch.push_firmware()
                 print('pushing firmware')
                 print('Waiting 10s for reboot')
                 sleep(10)
+            print('Checking and changing IP address of switch: {}'.format('172.168.16.'+ ip_add))
             if current_ip == client_default_ip:
-                # moxa_switch.conf_ip(ip_add)
+                moxa_switch.conf_ip(ip_add)
                 print('changing ip address to 172.168.16.{}'.format(ip_add))
                 print('Waiting 5 seconds, then reconnect')
-                # change client ip address
-                # reconnect with new ip address
-                # get info and save to file
+                sleep(5)
+                with open('switch.log', 'a') as logfile:
+                    moxa_switch = Connection('172.168.16.'+ ip_add)
+                    moxa_switch.cli_login()
+                    if moxa_switch.save()[0] == 0:
+                        system = moxa_switch.get_sysinfo()
+                        moxa_switch.get_startup_conf('configs/' + system[0])
+                        logfile.write('\n' + system[4] + ' - ' + system[0] + ' - 172.168.16.' + ip_add + ' - DONE')
+                        print('Everything done!')
+                    else:
+                        print('Saving to eeprom failed')
             break

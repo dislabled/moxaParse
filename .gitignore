@@ -1,4 +1,5 @@
 __pycache__/
+configs/*
 *.rom
 *.ini
 test.py

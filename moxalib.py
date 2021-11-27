@@ -16,16 +16,23 @@ class Connection:
         self.p = Process(target=self.ts.listen, args=('0.0.0.0',69))
 
     def check_login(self):
-        """
-        checks if login mode is menu or cli
-        returns 0 for menu login, 1 for cli login
+        """ Checks if login mode is menu or cli
+
+        Returns:
+            (tuple): first element is match, second is the item matched,
+                        third is the text read up until the match
+                        (0 is menu, 1 is cli, -1 when nothing matched)
+        Raises:
+            EOFError: when connection is closed
         """
         return self.tn.expect([br'terminal type', br'login as:'], 5)
 
     def cli_login(self, user='admin', password=''):
-        """
-        login with cli login
-        (user) default: 'admin', password default: ''
+        """ Login with cli login
+
+        Args: 
+            user (str): username, default 'admin'
+            password (str): password, default ''
         """
         print('Writing Account name: {}'.format(user))
         self.tn.write(user.encode('ascii') + b'\n')      # Enter username
@@ -38,9 +45,11 @@ class Connection:
         self.tn.read_until(b'EDS-408A-MM-SC#')
 
     def menu_login(self, user='admin', password=''):
-        """
-        login with menu, and change to cli login
-        (user) default: 'admin', password default: ''
+        """ Login with menu, and change to cli login
+
+        Args: 
+            user (str): username, default 'admin'
+            password (str): password, default ''
         """
         sleep_time = 0.4
         print('Entering Ansi terminal...')
@@ -68,13 +77,17 @@ class Connection:
 
     def push_firmware(self, server_ip, fw_file):
         """
-        starts tftp server, and instruct switch to download firmware
+        Starts tftp server, and instruct switch to download firmware
         closes tftp server when done
+
+        Args:
+            server_ip (str): IP Address of the tftp server
+            fw_file (str): Filename to pull
         """
         self.p.start()
         self.tn.write(b'copy tftp device-firmware\n')
         self.tn.write(server_ip.encode('utf-8') + b'\n')
-        self.tn.write(fw_file[0].encode('utf-8') + b'\n')
+        self.tn.write(fw_file.encode('utf-8') + b'\n')
         print(self.tn.read_until(b'Download OK !!!', 5.0).decode('ascii'))
         print('Switch is rebooting.')
         self.p.terminate()
@@ -82,38 +95,52 @@ class Connection:
         self.p.close()
 
     def get_sysinfo(self):
-        """
-        gets system info and returns it as a list
+        """ Gets system info and returns it as a list
+
+        Returns:
+            list: System parameters
+                   0: System Name, 1: Switch Location,
+                   2: Switch Description, 3: Maintainer Info,
+                   4: MAC Address, 5: Switch Uptime
         """
         self.tn.write(b'show system\n')
         sysinfo = self.tn.read_until(b'EDS-408A-MM-SC#').decode('ascii')
         return re.findall('(?<=: )(.*)\\r', sysinfo)
 
     def get_version(self):
-        """
-        gets version info and returns it as a list
+        """ Gets version info and returns it as a list
+
+        Returns:
+            list: Version info
+                    0: Device Model, 1: Firmware Version
         """
         self.tn.write(b'show version\n')
         version = self.tn.read_until(b'EDS-408A-MM-SC#').decode('ascii')
         return re.findall('(?<=: )(.*)\\r', version.strip())
 
     def get_ifaces(self):
-        """
-        gets status of interfaces, and returns it as a list.
+        """ Gets status of interfaces, and returns it as a list.
+        
+        Returns:
+            list: Status of all interfaces
         """
         self.tn.write(b'show interfaces ethernet\n')
         return re.findall("(?<=(?:1/.{3}))\\w+", self.tn.read_until(b'EDS-408A-MM-SC#').decode('ascii'))
 
     def get_portconfig(self):
-        """
-        gets the relay warning settings of the interfaces and returns it as a list.
+        """ Gets the relay warning settings of the interfaces and returns it as a list.
+
+        Returns:
+            list: Relay warning status of all interfaces
         """
         self.tn.write(b'show relay-warning config\n')
         return re.findall("(?<=(?:1/.).{10})\\w+", self.tn.read_until(b'EDS-408A-MM-SC#').decode('ascii'))
 
     def get_running_conf(self, server_ip):
-        """
-        start tftp server async and instruct switch to upload the running configuration
+        """ Start tftp server async and instruct switch to upload the running configuration
+
+        Args:
+            server_ip (str): The ip of the server which the switch should connect to
         """
         self.p.start()
         self.tn.write(b'copy running-config tftp ')
@@ -124,8 +151,11 @@ class Connection:
         self.p.close()
 
     def get_startup_conf(self, server_ip, filename):
-        """
-        start tftp server async and instruct switch to upload the startup configuration
+        """ Start tftp server async and instruct switch to upload the startup configuration
+
+        Args:
+            server_ip (str): The ip of the server which the switch should connect to
+            filename (str): The filename which is put on the tftp server
         """
         self.p.start()
         self.tn.write(b'copy startup-config tftp\n')
@@ -137,21 +167,22 @@ class Connection:
         self.p.close()
 
     def login_change(self):
-        """
-        Change login mode to menu
+        """ Change login mode to menu
         """
         self.tn.write(b'login mode menu\n')
 
-    def conf_iface(self, alarmdict):
-        """
-        Configures alarm for interfaces in alarmdict. value == 1 is alarm on
+    def conf_iface(self, alarm):
+        """ Configures alarm for interfaces in alarmdict. value == 1 is alarm on
+
+        Args:
+            alarm (dict): key=Interface, value=enable
         """
         self.tn.write(b'configure\n')
         self.tn.read_until(b'EDS-408A-MM-SC(config)#')
-        for iface in alarmdict:
+        for iface in alarm:
             self.tn.write(b'interface ethernet 1/'+ str(iface).encode('ascii') + b'\n')
             self.tn.read_until(b'EDS-408A-MM-SC(config-if)#')
-            if alarmdict[iface] == 1:
+            if alarm[iface] == 1:
                 self.tn.write(b'relay-warning event link-off\n')
                 self.tn.read_until(b'EDS-408A-MM-SC(config-if)#')
                 self.tn.write(b'exit\n')
@@ -165,8 +196,10 @@ class Connection:
         self.tn.read_until(b'EDS-408A-MM-SC#')
 
     def conf_ip(self, ip):
-        """
-        Changes the ip-address of the switch to (ip)
+        """ Changes the ip-address of the switch to (ip)
+
+        Args:
+            ip (str): IP Address to set
         """
         self.tn.write(b'configure\n')
         self.tn.read_until(b'EDS-408A-MM-SC(config)#')
@@ -178,8 +211,10 @@ class Connection:
         self.tn.read_until(b'EDS-408A-MM-SC#')
 
     def conf_hostname(self, hostname):
-        """
-        Changes the hostname of the switch to (hostname)
+        """ Changes the hostname of the switch
+
+        Args:
+            hostname (str): Hostname to switch to
         """
         self.tn.write(b'configure\n')
         self.tn.read_until(b'EDS-408A-MM-SC(config)#')
@@ -189,6 +224,8 @@ class Connection:
         self.tn.read_until(b'EDS-408A-MM-SC#')
 
     def save(self):
+        """ Saves the configuration from running to startup
+        """
         self.tn.write(b'save\n')
         status = self.tn.expect([br'Success', br'Fail'], 5)
         self.tn.read_until(b'EDS-408A-MM-SC#')

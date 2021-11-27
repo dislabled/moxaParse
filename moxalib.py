@@ -21,7 +21,7 @@ class Connection:
         self.prompt = prompt + self.p_end
         self.cprompt = b' (config) ' + self.prompt
         self.iprompt = b' (config-if) ' + self.prompt
-        self.vprompt = b' (config-vlan) ' self.prompt
+        self.vprompt = b' (config-vlan) ' + self.prompt
                 # self.tn.read_until(b'EDS-408A-MM-SC#')
                 # self.tn.read_until(b'EDS-408A-MM-SC(config)#')
                 # self.tn.read_until(b'EDS-408A-MM-SC(config-if)#')
@@ -111,9 +111,9 @@ class Connection:
 
         Returns:
             list: System parameters
-                   0: System Name, 1: Switch Location,
-                   2: Switch Description, 3: Maintainer Info,
-                   4: MAC Address, 5: Switch Uptime
+                  0: System Name, 1: Switch Location,
+                  2: Switch Description, 3: Maintainer Info,
+                  4: MAC Address, 5: Switch Uptime
         """
         self.tn.write(b'show system\n')
         sysinfo = self.tn.read_until(self.prompt).decode('ascii')

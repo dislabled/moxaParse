@@ -16,12 +16,13 @@ ACTION ORDER:
 """
 import subprocess
 from time import sleep
+from csv import reader, writer
 from moxalib import Connection
 
 fw_file = ['EDS408A_V3.8.rom', 3.8]
 ethernet_card = 'enp0s31f6'
 client_ip ='192.168.127.200'
-client_ip2 = '172.168.16.200'
+client_ip2 = '172.16.172.200'
 switch_def_ip = '192.168.127.253'
 switch_new_ip_r = '172.168.16.'
 
@@ -37,6 +38,21 @@ def get_ip():
     current_ip = ''.join(get_ip.stdout[slicepos+5:slicepos+20])
     return current_ip
 
+def read_config(configfile:str) -> list:
+    config = []
+    with open(configfile, 'r') as file:
+        csvconfig = reader(file, delimiter=',', quotechar='"')
+        cnt = 0
+        for row in csvconfig:
+            config.append(row)
+            cnt += 1
+    return config
+
+def write_config(configfile:str, mem:list) -> None:
+    with open(configfile, 'w') as file:
+        config = writer(file, delimiter=',', quotechar='"')
+        for row in mem:
+            config.writerow(row)
 
 def change_ip(ip, ip2):
     """
@@ -78,6 +94,14 @@ def parse_list(list, keyword):
         cnt += 1
     return ports
 
+def check_list(list:list, match:str) -> int:
+    val = -1
+    cnt = 0
+    for row in list:
+        if match.rstrip('MR') == row[0]:
+            val = cnt
+        cnt += 1
+    return val
 
 if __name__ == "__main__":
     while True:
@@ -88,9 +112,22 @@ if __name__ == "__main__":
             if ipchange.lower() == 'y':
                 change_ip(client_ip, client_ip2)
         # -----------[ switch ]---------------
-        hostname = input('Enter hostname for the switch: ')
+        switchlist = read_config('config.csv')
+        while True:
+            hostname = input('Enter hostname for the switch + M\\R: ').upper()
+            listpos = check_list(switchlist, hostname)
+            if hostname == '':
+                print('No Hostname defined, quitting...')
+                quit(-1)
+            if listpos >= 0:
+                if switchlist[listpos][9] != '':
+                    break
+                else:
+                    print('This switch does not have an IP address configured')
+            else:
+                print('hostname {} not found in list..'.format(hostname))
         clientport = input('Which port is the client attached to: ')
-        ip_add = input('Enter the last three digits of the new ip-address: ')
+        comments = input('Any comments?: ')
         moxa_switch = Connection(switch_def_ip)
         login_mode = moxa_switch.check_login()
         if login_mode[0] == 0:
@@ -117,7 +154,7 @@ if __name__ == "__main__":
             print('{:<35}{}'.format('Interfaces configured with alarm: ', portlist))
             print('{:<35}{}'.format('Interfaces in use: ', ifacelist))
             print('-'*80)
-            if input('continue? (y/n)').lower() != 'y':
+            if input('continue? (y/N)').lower() != 'y':
                 break
             print('Changing Hostname: {}'.format(hostname))
             moxa_switch.conf_hostname(hostname)
@@ -129,28 +166,33 @@ if __name__ == "__main__":
                 print('pushing firmware')
                 print('Waiting 10s for reboot')
                 sleep(10)
-            print('Checking and changing IP address of switch: {}{}'.format(switch_new_ip_r, ip_add))
+            print('Checking and changing IP address of switch: {}'.format(switchlist[listpos][9]))
             if current_ip == client_ip:
-                moxa_switch.conf_ip(switch_new_ip_r + ip_add)
+                moxa_switch.conf_ip(switchlist[listpos][9])
                 print('Waiting 5 seconds, then reconnect')
                 sleep(5)
-                with open('switch.log', 'a') as logfile:
-                    moxa_switch = Connection(switch_new_ip_r + ip_add)
-                    moxa_switch.cli_login()
-                    if moxa_switch.save()[0] == 0:
-                        system = moxa_switch.get_sysinfo()
-                        version = moxa_switch.get_version()
-                        portlist = parse_list(moxa_switch.get_portconfig(), 'Off')
-                        ifacelist = parse_list(moxa_switch.get_ifaces(), 'Up')
-                        moxa_switch.get_startup_conf(client_ip, 'configs/' + system[0])
-                        logfile.write('\n' + system[4] + ' - ' + system[0] + ' - ' + switch_def_ip + ip_add + ' - DONE')
-                        print('-'*80)
-                        print('{:<45}{}\n{:<45}{}\n{}'.format('Switch Name: ' + system[0], 'Switch Location: ' + system[1],
-                            'Switch Description: ' + system[2], 'MAC Address: ' + system[4], 'Uptime: ' + system[5]))
-                        print('{:<45}{}'.format('Model Version: ' + version[0], 'FW Version: ' +  version[1]))
-                        print('{:<35}{}'.format('Interfaces configured with alarm: ', portlist))
-                        print('{:<35}{}'.format('Interfaces in use: ', ifacelist))
-                        print('-'*80)
-                    else:
-                        print('Saving to eeprom failed')
+                moxa_switch = Connection(switchlist[listpos][9])
+                moxa_switch.cli_login()
+                moxa_switch.conf_location(switchlist[listpos][10])
+                if moxa_switch.save()[0] == 0:
+                    system = moxa_switch.get_sysinfo()
+                    version = moxa_switch.get_version()
+                    portlist = parse_list(moxa_switch.get_portconfig(), 'Off')
+                    ifacelist = parse_list(moxa_switch.get_ifaces(), 'Up')
+                    moxa_switch.get_startup_conf(client_ip, 'configs/' + system[0])
+                    if hostname[-1].upper() == ['M']:
+                        switchlist[listpos][11] = system[4]
+                    elif hostname[-1].upper() == ['R']:
+                        switchlist[listpos][12] = system[4]
+                    switchlist[listpos][13] = comments
+                    write_config('config.csv', switchlist)
+                    print('-'*80)
+                    print('{:<45}{}\n{:<45}{}\n{}'.format('Switch Name: ' + system[0], 'Switch Location: ' + system[1],
+                        'Switch Description: ' + system[2], 'MAC Address: ' + system[4], 'Uptime: ' + system[5]))
+                    print('{:<45}{}'.format('Model Version: ' + version[0], 'FW Version: ' +  version[1]))
+                    print('{:<35}{}'.format('Interfaces configured with alarm: ', portlist))
+                    print('{:<35}{}'.format('Interfaces in use: ', ifacelist))
+                    print('-'*80)
+                else:
+                    print('Saving to eeprom failed')
             break

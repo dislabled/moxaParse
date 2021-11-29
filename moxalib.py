@@ -240,6 +240,19 @@ class Connection:
         self.tn.write(b'exit\n')
         self.tn.read_until(self.prompt)
 
+    def conf_location(self, location:str) -> None:
+        """ Changes the location parameter of the switch
+
+        Args:
+            hostname (str): location string to switch to
+        """
+        self.tn.write(b'configure\n')
+        self.tn.read_until(self.cprompt)
+        self.tn.write(b'snmp-server location ' + location.encode('utf-8') + b'\n')
+        self.tn.read_until(self.cprompt)
+        self.tn.write(b'exit\n')
+        self.tn.read_until(self.prompt)
+
     def save(self) -> tuple:
         """ Saves the configuration from running to startup """
         self.tn.write(b'save\n')

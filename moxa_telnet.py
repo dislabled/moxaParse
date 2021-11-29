@@ -23,15 +23,18 @@ ethernet_card = 'enp0s31f6'
 client_ip ='192.168.127.200'
 client_ip2 = '172.168.16.200'
 switch_def_ip = '192.168.127.253'
+switch_new_ip_r = '172.168.16.'
+
+def cls():
+    print("\033[H\033[J", end="")
 
 def get_ip():
     """
     get client ip and return it as a string
     """
-    get_ip = subprocess.run(["ip addr show " + ethernet_card], shell=True, capture_output=True, encoding='ascii')
+    get_ip = subprocess.run(["ip addr show " + ethernet_card], shell=True, capture_output=True, encoding='utf-8')
     slicepos = get_ip.stdout.find('inet ')
     current_ip = ''.join(get_ip.stdout[slicepos+5:slicepos+20])
-    print(current_ip)
     return current_ip
 
 
@@ -95,7 +98,11 @@ if __name__ == "__main__":
             print('Reestablishing connection')
             sleep(5)
         elif login_mode[0] == -1:
-            print("Unknown login, exiting...")
+            cls()
+            print("Unknown login:")
+            print('-'*80)
+            print(login_mode[2].decode('utf-8'), end='')
+            print('-'*80)
             break
         elif login_mode[0] == 1:
             moxa_switch.cli_login()
@@ -122,14 +129,13 @@ if __name__ == "__main__":
                 print('pushing firmware')
                 print('Waiting 10s for reboot')
                 sleep(10)
-            print('Checking and changing IP address of switch: {}'.format('172.168.16.'+ ip_add))
+            print('Checking and changing IP address of switch: {}{}'.format(switch_new_ip_r, ip_add))
             if current_ip == client_ip:
-                moxa_switch.conf_ip(ip_add)
-                print('changing ip address to 172.168.16.{}'.format(ip_add))
+                moxa_switch.conf_ip(switch_new_ip_r + ip_add)
                 print('Waiting 5 seconds, then reconnect')
                 sleep(5)
                 with open('switch.log', 'a') as logfile:
-                    moxa_switch = Connection('172.168.16.'+ ip_add)
+                    moxa_switch = Connection(switch_new_ip_r + ip_add)
                     moxa_switch.cli_login()
                     if moxa_switch.save()[0] == 0:
                         system = moxa_switch.get_sysinfo()
@@ -137,7 +143,7 @@ if __name__ == "__main__":
                         portlist = parse_list(moxa_switch.get_portconfig(), 'Off')
                         ifacelist = parse_list(moxa_switch.get_ifaces(), 'Up')
                         moxa_switch.get_startup_conf(client_ip, 'configs/' + system[0])
-                        logfile.write('\n' + system[4] + ' - ' + system[0] + ' - 172.168.16.' + ip_add + ' - DONE')
+                        logfile.write('\n' + system[4] + ' - ' + system[0] + ' - ' + switch_def_ip + ip_add + ' - DONE')
                         print('-'*80)
                         print('{:<45}{}\n{:<45}{}\n{}'.format('Switch Name: ' + system[0], 'Switch Location: ' + system[1],
                             'Switch Description: ' + system[2], 'MAC Address: ' + system[4], 'Uptime: ' + system[5]))

@@ -38,8 +38,8 @@ class Connection:
 
         Returns:
             (tuple): first element is match, second is the item matched,
-                        third is the text read up until the match
-                        (0 is menu, 1 is cli, -1 when nothing matched)
+                     third is the text read up until the match
+                     (0 is menu, 1 is cli, -1 when nothing matched)
         Raises:
             EOFError: when connection is closed
         """
@@ -130,7 +130,7 @@ class Connection:
 
         Returns:
             list: Version info
-                    0: Device Model, 1: Firmware Version
+                  0: Device Model, 1: Firmware Version
         """
         self.tn.write(b'show version\n')
         version = self.tn.read_until(self.prompt).decode('utf-8')

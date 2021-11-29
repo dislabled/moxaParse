@@ -1,0 +1,3 @@
+Cabinet:,,SW,IOG,MBB,,MBR,,IBC IP address,Switch IP address,Location,MAC M,MAC R,Comment
+,,,,S1,S2,S1,S2,,,,,,
+TESTNAME,CPU1,1,A2,0,8,0,0,172.16.172.1,172.16.172.101,By the compressor,,,

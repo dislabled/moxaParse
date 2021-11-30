@@ -112,22 +112,6 @@ if __name__ == "__main__":
             if ipchange.lower() == 'y':
                 change_ip(client_ip, client_ip2)
         # -----------[ switch ]---------------
-        switchlist = read_config('config.csv')
-        while True:
-            hostname = input('Enter hostname for the switch + M\\R: ').upper()
-            listpos = check_list(switchlist, hostname)
-            if hostname == '':
-                print('No Hostname defined, quitting...')
-                quit(-1)
-            if listpos >= 0:
-                if switchlist[listpos][9] != '':
-                    break
-                else:
-                    print('This switch does not have an IP address configured')
-            else:
-                print('hostname {} not found in list..'.format(hostname))
-        clientport = input('Which port is the client attached to: ')
-        comments = input('Any comments?: ')
         moxa_switch = Connection(switch_def_ip)
         login_mode = moxa_switch.check_login()
         if login_mode[0] == 0:
@@ -142,6 +126,23 @@ if __name__ == "__main__":
             print('-'*80)
             break
         elif login_mode[0] == 1:
+            switchlist = read_config('config.csv')
+            while True:
+                hostname = input('Enter hostname for the switch + M\\R: ').upper()
+                if hostname == '':
+                    print('No Hostname defined, quitting...')
+                    quit(-1)
+                if hostname[-1:].upper() == 'M' or hostname[-1:].upper() == 'R':
+                    listpos = check_list(switchlist, hostname)
+                    if listpos >= 0:
+                        if switchlist[listpos][9] != '':
+                            break
+                        else:
+                            print('This switch does not have an IP address configured')
+                else:
+                    print('hostname {} not found in list..'.format(hostname))
+            clientport = input('Which port is the client attached to: ')
+            comments = input('Any comments?: ')
             moxa_switch.cli_login()
             version = moxa_switch.get_version()
             system = moxa_switch.get_sysinfo()
@@ -180,9 +181,9 @@ if __name__ == "__main__":
                     portlist = parse_list(moxa_switch.get_portconfig(), 'Off')
                     ifacelist = parse_list(moxa_switch.get_ifaces(), 'Up')
                     moxa_switch.get_startup_conf(client_ip, 'configs/' + system[0])
-                    if hostname[-1].upper() == ['M']:
+                    if hostname[-1:].upper() == 'M':
                         switchlist[listpos][11] = system[4]
-                    elif hostname[-1].upper() == ['R']:
+                    elif hostname[-1:].upper() == 'R':
                         switchlist[listpos][12] = system[4]
                     switchlist[listpos][13] = comments
                     write_config('config.csv', switchlist)

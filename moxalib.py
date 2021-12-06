@@ -43,7 +43,7 @@ class Connection:
         Raises:
             EOFError: when connection is closed
         """
-        return self.tn.expect([br'terminal type', br'login as:'], 5)
+        return self.tn.expect([br'vt52\) : 1', br'login as:'], 5)
 
     def cli_login(self, user:str='admin', password:str='') -> None:
         """ Login with cli login
@@ -69,25 +69,27 @@ class Connection:
             user (str): username, default 'admin'
             password (str): password, default ''
         """
-        sleep_time = 0.4
         print('Entering Ansi terminal...')
-        sleep(sleep_time)
         self.tn.write(b'\r')                             # Press enter to use ansi terminal
-        # tn.interact()
-        print('Writing Account name: {}'.format(user))
-        sleep(sleep_time)
-        self.tn.write(user.encode('utf-8') + b'\n')      # Enter username
+        account_mode = self.tn.expect([br'\[admin\]'], timeout=5)
+        if account_mode[0] == 0:
+            print('Selecting Account name: {}'.format(user))
+            test = self.tn.read_some()
+            print(test.decode('utf-8'))
+            self.tn.write(b'\x1b[B')                     # Enter username
+        else:
+            print('Writing Account name: {}'.format(user))
+            self.tn.write(user.encode('utf-8') + b'\n')  # Enter username
         print('Writing Password: {}'.format(password))
-        sleep(sleep_time)
         self.tn.write(password.encode('utf-8') + b'\n')  # Enter password
-        print('Command 1...')
-        sleep(sleep_time)
+        print('Entering "Basic" menu...')
+        self.tn.read_lazy()
         self.tn.write(b'1\n')                            # Enter menu - Basic
-        print('Command 2...')
-        sleep(sleep_time)
+        print('Entering "Login mode" menu...')
+        self.tn.read_lazy()
         self.tn.write(b'l\n')                            # Enter menu login mode
-        print('Command 3...')
-        sleep(sleep_time)
+        print('Entering "yes" to switch mode...')
+        self.tn.read_lazy()
         self.tn.write(b'Y\n')                            # Enter yes to switch to CLI
         print('Restarting Connection')
         self.tn.close()

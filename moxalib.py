@@ -22,16 +22,16 @@ class Connection:
         self.cprompt = prompt + b'(config)' + self.p_end
         self.iprompt = prompt + b'(config-if)' + self.p_end
         self.vprompt = prompt + b'(config-vlan)' + self.p_end
-                # self.tn.read_until(b'EDS-408A-MM-SC#')
-                # self.tn.read_until(b'EDS-408A-MM-SC(config)#')
-                # self.tn.read_until(b'EDS-408A-MM-SC(config-if)#')
-                # self.tn.read_until(b'EDS-408A-MM-SC(config-vlan)#')
 
     def test(self):
-        print(self.prompt)
-        print(self.cprompt)
-        print(self.iprompt)
-        print(self.vprompt)
+        # print(self.prompt)
+        # print(self.cprompt)
+        # print(self.iprompt)
+        # print(self.vprompt)
+        self.cli_login()
+        print(self.get_version())
+        print(self.get_sysinfo())
+
 
     def check_login(self):
         """ Checks if login mode is menu or cli
@@ -57,10 +57,15 @@ class Connection:
         self.tn.read_until(b'password:').decode('utf-8')
         print('Writing Password: {}'.format(password))
         self.tn.write(password.encode('utf-8') + b'\n')  # Enter password
-        self.tn.write('\n'.encode('utf-8'))              # Confirm popup for weak password
-        self.tn.read_until(self.prompt)
+        after_pw = self.tn.expect([self.prompt], timeout=2)
+        if after_pw[0] != 0:
+            # Confirm popu for weak password
+            # Only on newer firmware
+            self.tn.write('\n'.encode('utf-8'))
+            self.tn.read_until(self.prompt)
         self.tn.write(b'terminal length 0\n')            # Change to unlimited length
-        self.tn.read_until(b'EDS-408A-MM-SC#')
+        self.tn.read_until(self.prompt)
+
 
     def menu_login(self, user:str='admin', password:str='') -> None:
         """ Login with menu, and change to cli login
@@ -95,7 +100,7 @@ class Connection:
         self.tn.close()
         sleep(3)
 
-    def push_firmware(self, server_ip:str, fw_file:str) -> None:
+    def push_firmware(self, server_ip:str, fw_file:str) -> int:
         """
         Starts tftp server, and instruct switch to download firmware
         closes tftp server when done
@@ -108,11 +113,13 @@ class Connection:
         self.tn.write(b'copy tftp device-firmware\n')
         self.tn.write(server_ip.encode('utf-8') + b'\n')
         self.tn.write(fw_file.encode('utf-8') + b'\n')
-        print(self.tn.read_until(b'Download OK !!!', 5.0).decode('utf-8'))
-        print('Switch is rebooting.')
+        print('Waiting for firmware download: ')
+        print('-'*80)
+        status = self.tn.expect([br'Download OK !!!', br'Fail'], 180.0) 
         self.p.terminate()
         self.p.join()
         self.p.close()
+        return status[0]
 
     def get_sysinfo(self) -> list:
         """ Gets system info and returns it as a list
@@ -125,7 +132,7 @@ class Connection:
         """
         self.tn.write(b'show system\n')
         sysinfo = self.tn.read_until(self.prompt).decode('utf-8')
-        return re.findall('(?<=: )(.*)\\r', sysinfo)
+        return re.findall('(?<=: )(.*)\\r', sysinfo.strip())
 
     def get_version(self) -> list:
         """ Gets version info and returns it as a list

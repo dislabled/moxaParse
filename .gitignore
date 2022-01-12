@@ -1,6 +1,6 @@
 __pycache__/
 configs/*
-*.rom
-*.ini
-test.py
-test.txt
+test.*
+*.csv
+
+config.csv

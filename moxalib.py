@@ -19,25 +19,31 @@ class Connection:
         self.p = Process(target=self.ts.listen, args=('0.0.0.0',69))
         self.p_end = b'#'
         self.prompt = prompt + self.p_end
-        self.cprompt = b' (config) ' + self.prompt
-        self.iprompt = b' (config-if) ' + self.prompt
-        self.vprompt = b' (config-vlan) ' + self.prompt
-                # self.tn.read_until(b'EDS-408A-MM-SC#')
-                # self.tn.read_until(b'EDS-408A-MM-SC(config)#')
-                # self.tn.read_until(b'EDS-408A-MM-SC(config-if)#')
-                # self.tn.read_until(b'EDS-408A-MM-SC(config-vlan)#')
+        self.cprompt = prompt + b'(config)' + self.p_end
+        self.iprompt = prompt + b'(config-if)' + self.p_end
+        self.vprompt = prompt + b'(config-vlan)' + self.p_end
+
+    def test(self):
+        # print(self.prompt)
+        # print(self.cprompt)
+        # print(self.iprompt)
+        # print(self.vprompt)
+        self.cli_login()
+        print(self.get_version())
+        print(self.get_sysinfo())
+
 
     def check_login(self):
         """ Checks if login mode is menu or cli
 
         Returns:
             (tuple): first element is match, second is the item matched,
-                        third is the text read up until the match
-                        (0 is menu, 1 is cli, -1 when nothing matched)
+                     third is the text read up until the match
+                     (0 is menu, 1 is cli, -1 when nothing matched)
         Raises:
             EOFError: when connection is closed
         """
-        return self.tn.expect([br'terminal type', br'login as:'], 5)
+        return self.tn.expect([br'vt52\) : 1', br'login as:'], 5)
 
     def cli_login(self, user:str='admin', password:str='') -> None:
         """ Login with cli login
@@ -47,14 +53,19 @@ class Connection:
             password (str): password, default ''
         """
         print('Writing Account name: {}'.format(user))
-        self.tn.write(user.encode('ascii') + b'\n')      # Enter username
-        self.tn.read_until(b'password:').decode('ascii')
+        self.tn.write(user.encode('utf-8') + b'\n')      # Enter username
+        self.tn.read_until(b'password:').decode('utf-8')
         print('Writing Password: {}'.format(password))
-        self.tn.write(password.encode('ascii') + b'\n')  # Enter password
-        self.tn.write('\n'.encode('ascii'))              # Confirm popup for weak password
-        self.tn.read_until(self.prompt)
+        self.tn.write(password.encode('utf-8') + b'\n')  # Enter password
+        after_pw = self.tn.expect([self.prompt], timeout=2)
+        if after_pw[0] != 0:
+            # Confirm popu for weak password
+            # Only on newer firmware
+            self.tn.write('\n'.encode('utf-8'))
+            self.tn.read_until(self.prompt)
         self.tn.write(b'terminal length 0\n')            # Change to unlimited length
-        self.tn.read_until(b'EDS-408A-MM-SC#')
+        self.tn.read_until(self.prompt)
+
 
     def menu_login(self, user:str='admin', password:str='') -> None:
         """ Login with menu, and change to cli login
@@ -63,31 +74,33 @@ class Connection:
             user (str): username, default 'admin'
             password (str): password, default ''
         """
-        sleep_time = 0.4
         print('Entering Ansi terminal...')
-        sleep(sleep_time)
         self.tn.write(b'\r')                             # Press enter to use ansi terminal
-        # tn.interact()
-        print('Writing Account name: {}'.format(user))
-        sleep(sleep_time)
-        self.tn.write(user.encode('utf-8') + b'\n')      # Enter username
+        account_mode = self.tn.expect([br'\[admin\]'], timeout=5)
+        if account_mode[0] == 0:
+            print('Selecting Account name: {}'.format(user))
+            test = self.tn.read_some()
+            print(test.decode('utf-8'))
+            self.tn.write(b'\x1b[B')                     # Enter username
+        else:
+            print('Writing Account name: {}'.format(user))
+            self.tn.write(user.encode('utf-8') + b'\n')  # Enter username
         print('Writing Password: {}'.format(password))
-        sleep(sleep_time)
         self.tn.write(password.encode('utf-8') + b'\n')  # Enter password
-        print('Command 1...')
-        sleep(sleep_time)
+        print('Entering "Basic" menu...')
+        self.tn.read_lazy()
         self.tn.write(b'1\n')                            # Enter menu - Basic
-        print('Command 2...')
-        sleep(sleep_time)
+        print('Entering "Login mode" menu...')
+        self.tn.read_lazy()
         self.tn.write(b'l\n')                            # Enter menu login mode
-        print('Command 3...')
-        sleep(sleep_time)
+        print('Entering "yes" to switch mode...')
+        self.tn.read_lazy()
         self.tn.write(b'Y\n')                            # Enter yes to switch to CLI
         print('Restarting Connection')
         self.tn.close()
         sleep(3)
 
-    def push_firmware(self, server_ip:str, fw_file:str) -> None:
+    def push_firmware(self, server_ip:str, fw_file:str) -> int:
         """
         Starts tftp server, and instruct switch to download firmware
         closes tftp server when done
@@ -100,13 +113,15 @@ class Connection:
         self.tn.write(b'copy tftp device-firmware\n')
         self.tn.write(server_ip.encode('utf-8') + b'\n')
         self.tn.write(fw_file.encode('utf-8') + b'\n')
-        print(self.tn.read_until(b'Download OK !!!', 5.0).decode('ascii'))
-        print('Switch is rebooting.')
+        print('Waiting for firmware download: ')
+        print('-'*80)
+        status = self.tn.expect([br'Download OK !!!', br'Fail'], 180.0) 
         self.p.terminate()
         self.p.join()
         self.p.close()
+        return status[0]
 
-    def get_sysinfo(self) -> list[str]:
+    def get_sysinfo(self) -> list:
         """ Gets system info and returns it as a list
 
         Returns:
@@ -116,37 +131,37 @@ class Connection:
                   4: MAC Address, 5: Switch Uptime
         """
         self.tn.write(b'show system\n')
-        sysinfo = self.tn.read_until(self.prompt).decode('ascii')
-        return re.findall('(?<=: )(.*)\\r', sysinfo)
+        sysinfo = self.tn.read_until(self.prompt).decode('utf-8')
+        return re.findall('(?<=: )(.*)\\r', sysinfo.strip())
 
-    def get_version(self) -> list[str]:
+    def get_version(self) -> list:
         """ Gets version info and returns it as a list
 
         Returns:
             list: Version info
-                    0: Device Model, 1: Firmware Version
+                  0: Device Model, 1: Firmware Version
         """
         self.tn.write(b'show version\n')
-        version = self.tn.read_until(self.prompt).decode('ascii')
+        version = self.tn.read_until(self.prompt).decode('utf-8')
         return re.findall('(?<=: )(.*)\\r', version.strip())
 
-    def get_ifaces(self) -> list[str]:
+    def get_ifaces(self) -> list:
         """ Gets status of interfaces, and returns it as a list.
         
         Returns:
             list: Status of all interfaces
         """
         self.tn.write(b'show interfaces ethernet\n')
-        return re.findall("(?<=(?:1/.{3}))\\w+", self.tn.read_until(self.prompt).decode('ascii'))
+        return re.findall("(?<=(?:1/.{3}))\\w+", self.tn.read_until(self.prompt).decode('utf-8'))
 
-    def get_portconfig(self) -> list[str]:
+    def get_portconfig(self) -> list:
         """ Gets the relay warning settings of the interfaces and returns it as a list.
 
         Returns:
             list: Relay warning status of all interfaces
         """
         self.tn.write(b'show relay-warning config\n')
-        return re.findall("(?<=(?:1/.).{10})\\w+", self.tn.read_until(self.prompt).decode('ascii'))
+        return re.findall("(?<=(?:1/.).{10})\\w+", self.tn.read_until(self.prompt).decode('utf-8'))
 
     def get_running_conf(self, server_ip:str) -> None:
         """ Start tftp server async and instruct switch to upload the running configuration
@@ -156,8 +171,8 @@ class Connection:
         """
         self.p.start()
         self.tn.write(b'copy running-config tftp ')
-        self.tn.write(b'tftp://' + server_ip.encode('ascii') + b'/running.ini\n')
-        print(self.tn.read_until(b'Upload Ok !!!', 5.0).decode('ascii'))
+        self.tn.write(b'tftp://' + server_ip.encode('utf-8') + b'/running.ini\n')
+        print(self.tn.read_until(b'Upload Ok !!!', 5.0).decode('utf-8'))
         self.p.terminate()
         self.p.join()
         self.p.close()
@@ -171,9 +186,9 @@ class Connection:
         """
         self.p.start()
         self.tn.write(b'copy startup-config tftp\n')
-        self.tn.write(server_ip.encode('ascii') + b'\n')
-        self.tn.write(filename.encode('ascii') + b'_sys.ini\n')
-        print(self.tn.read_until(b'Upload Ok !!!', 5.0).decode('ascii'))
+        self.tn.write(server_ip.encode('utf-8') + b'\n')
+        self.tn.write(filename.encode('utf-8') + b'_sys.ini\n')
+        print(self.tn.read_until(b'Upload Ok !!!', 5.0).decode('utf-8'))
         self.p.terminate()
         self.p.join()
         self.p.close()
@@ -191,7 +206,7 @@ class Connection:
         self.tn.write(b'configure\n')
         self.tn.read_until(self.cprompt)
         for iface in alarm:
-            self.tn.write(b'interface ethernet 1/'+ str(iface).encode('ascii') + b'\n')
+            self.tn.write(b'interface ethernet 1/'+ str(iface).encode('utf-8') + b'\n')
             self.tn.read_until(self.iprompt)
             if alarm[iface] == 1:
                 self.tn.write(b'relay-warning event link-off\n')
@@ -216,8 +231,8 @@ class Connection:
         self.tn.read_until(self.cprompt)
         self.tn.write(b'interface mgmt\n')
         self.tn.read_until(self.vprompt)
-        self.tn.write(b'ip address static 172.168.16.' +
-                ip.encode('ascii') + b' 255.255.255.0\n')
+        self.tn.write(b'ip address static ' +
+                ip.encode('utf-8') + b' 255.255.255.0\n')
         self.tn.write(b'exit\n')
         self.tn.read_until(self.prompt)
 
@@ -229,7 +244,20 @@ class Connection:
         """
         self.tn.write(b'configure\n')
         self.tn.read_until(self.cprompt)
-        self.tn.write(b'hostname ' + hostname.encode('ascii') + b'\n')
+        self.tn.write(b'hostname ' + hostname.encode('utf-8') + b'\n')
+        self.tn.read_until(self.cprompt)
+        self.tn.write(b'exit\n')
+        self.tn.read_until(self.prompt)
+
+    def conf_location(self, location:str) -> None:
+        """ Changes the location parameter of the switch
+
+        Args:
+            hostname (str): location string to switch to
+        """
+        self.tn.write(b'configure\n')
+        self.tn.read_until(self.cprompt)
+        self.tn.write(b'snmp-server location ' + location.encode('utf-8') + b'\n')
         self.tn.read_until(self.cprompt)
         self.tn.write(b'exit\n')
         self.tn.read_until(self.prompt)
@@ -240,3 +268,8 @@ class Connection:
         status = self.tn.expect([br'Success', br'Fail'], 5)
         self.tn.read_until(self.prompt)
         return status
+
+
+if __name__ == "__main__":
+    test = Connection('192.168.127.253')
+    test.test()

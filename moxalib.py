@@ -28,9 +28,10 @@ class Connection:
         # print(self.cprompt)
         # print(self.iprompt)
         # print(self.vprompt)
-        self.cli_login()
-        print(self.get_version())
-        print(self.get_sysinfo())
+        # self.cli_login()
+        # print(self.get_version())
+        self.p.start()
+        # print(self.get_sysinfo())
 
 
     def check_login(self):
